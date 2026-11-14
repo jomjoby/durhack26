@@ -9,11 +9,11 @@ retry_session = retry(cache_session, retries = 5, backoff_factor = 0.2)
 openmeteo = openmeteo_requests.Client(session = retry_session)
 
 locations = {
-    "uk": [54.00, 2.00],
+    "London": [51.50, 0.12],
     "Tokyo": [35.69, 139.69],
-    "Ny" : [40.71, -74.01],
-    "Shang" : [31.22, 121.46],
-    "Australia" : [-25, 135]
+    "New York" : [40.71, -74.01],
+    "Shanghai" : [31.22, 121.46],
+    "Sydney" : [-33.86, 151.20]
 }
 
 latitudes = [loc[0] for loc in locations.values()]
@@ -58,11 +58,15 @@ for i, response in enumerate(responses):
     hourly_dataframe.to_csv(f"weather_data_{location_name}.csv", index=False)
 
 
-''' 
-    print(f"Temperature: {current.Variables(0).Value()}°C")
-    print(f"Humidity: {current.Variables(1).Value()}%")
-    print(f"Wind Speed: {current.Variables(2).Value()} km/h\n")
-'''
+def getTemp(loc_name):
+    for i, response in enumerate(responses):
+        current_location = list(locations.keys())[i]
 
+        if current_location.lower() == loc_name.lower():
+            current = response.Current()
+            temp = current.Variables(0).Value()
 
+            return temp
+    return None
 
+    
