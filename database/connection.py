@@ -1,9 +1,10 @@
 import os
+from pathlib import Path
 
 import psycopg
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(Path(__file__).parent / ".env")
 
 
 def get_connection():
@@ -12,4 +13,7 @@ def get_connection():
     if not database_url:
         raise ValueError("DATABASE_URL is missing from .env")
 
-    return psycopg.connect(database_url)
+    return psycopg.connect(
+        database_url,
+        connect_timeout=10
+    )
