@@ -99,9 +99,12 @@ def getPastYear(loc_name):
         "longitude": longitude,
         "start_date": start_date.strftime("%Y-%m-%d"),
         "end_date": end_date.strftime("%Y-%m-%d"),
+        # The order here must match the Variables(n) indexes below
         "hourly": [
             "temperature_2m",
-            "relative_humidity_2m"
+            "relative_humidity_2m",
+            "precipitation",
+            "cloud_cover"
         ],
         "timezone": "auto"
     }
@@ -119,7 +122,9 @@ def getPastYear(loc_name):
             inclusive="left"
         ),
         "temperature_2m": hourly.Variables(0).ValuesAsNumpy(),
-        "relative_humidity_2m": hourly.Variables(1).ValuesAsNumpy()
+        "relative_humidity_2m": hourly.Variables(1).ValuesAsNumpy(),
+        "precipitation": hourly.Variables(2).ValuesAsNumpy(),
+        "cloud_cover": hourly.Variables(3).ValuesAsNumpy()
     }
 
     return pd.DataFrame(hourly_data)
