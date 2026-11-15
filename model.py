@@ -1,4 +1,3 @@
-
 import pandas as pd
 import numpy as np
 
@@ -35,13 +34,17 @@ for city, data in weather_locations.items():
 
     daily_weather = data.groupby("date").agg(
         temperature=("temperature_2m", "mean"),
-        humidity=("relative_humidity_2m", "mean")
+        humidity=("relative_humidity_2m", "mean"),
+        rain=("precipitation", "sum"),        # total mm per day
+        cloud=("cloud_cover", "mean")         # average % per day
     )
 
     daily_weather = daily_weather.rename(
         columns={
             "temperature": f"{city}_temperature",
-            "humidity": f"{city}_humidity"
+            "humidity": f"{city}_humidity",
+            "rain": f"{city}_rain",
+            "cloud": f"{city}_cloud"
         }
     )
 
@@ -100,6 +103,50 @@ combined_data["previous_return"] = (
 
 
 # --------------------------------
+# 4b. WEATHER RULES
+#     sunny / warm  -> buy
+#     rainy / cold  -> sell
+# --------------------------------
+
+# Thresholds you can tweak
+RAIN_MM = 1       # more than this many mm in a day counts as "rainy"
+SUNNY_CLOUD = 30  # less than this % cloud cover counts as "sunny"
+SCORE_CUTOFF = 0.5
+
+weather_scores = pd.DataFrame(index=combined_data.index)
+
+for city in weather_locations:
+
+    temp = combined_data[f"{city}_temperature"]
+
+    # "Warm" or "cold" compared with the recent past (30 trading days),
+    # not an absolute number, so seasons don't dominate
+    temp_vs_normal = temp - temp.rolling(30, min_periods=10).mean()
+
+    weather_scores[city] = (
+        np.sign(temp_vs_normal)                                      # warm +1, cold -1
+        + np.where(combined_data[f"{city}_rain"] > RAIN_MM, -1, 0)   # rainy -1
+        + np.where(combined_data[f"{city}_cloud"] < SUNNY_CLOUD, 1, 0)  # sunny +1
+    )
+
+# Average across all cities
+# (to use only New York, replace this with weather_scores["New York"])
+combined_data["weather_score"] = weather_scores.mean(axis=1)
+
+combined_data["rule_signal"] = np.select(
+    [
+        combined_data["weather_score"] > SCORE_CUTOFF,
+        combined_data["weather_score"] < -SCORE_CUTOFF
+    ],
+    [
+        1,   # BUY
+        -1   # SELL
+    ],
+    default=0  # HOLD
+)
+
+
+# --------------------------------
 # 5. CREATE THE TARGET
 # --------------------------------
 
@@ -126,6 +173,14 @@ combined_data["signal"] = np.select(
 )
 
 
+# Return from following the weather rule:
+# BUY = invested for the next day, SELL/HOLD = in cash
+combined_data["rule_return"] = (
+    combined_data["rule_signal"].clip(lower=0)
+    * combined_data["future_return"]
+)
+
+
 # --------------------------------
 # 6. SELECT MODEL INPUTS
 # --------------------------------
@@ -134,9 +189,12 @@ features = [
     column for column in combined_data.columns
     if column.endswith("_temperature")
     or column.endswith("_humidity")
+    or column.endswith("_rain")
+    or column.endswith("_cloud")
 ]
 
 features.append("previous_return")
+features.append("weather_score")
 
 
 # Remove rows with missing information
@@ -209,6 +267,44 @@ print(
 )
 
 
+# Which inputs did the model actually use?
+importances = pd.Series(
+    model.feature_importances_,
+    index=features
+).sort_values(ascending=False)
+
+print("\nTOP 10 FEATURES")
+print("-----------------------")
+print(importances.head(10).round(3))
+
+
+# --------------------------------
+# 9b. TEST THE WEATHER RULE
+#     (on the same unseen test period as the model)
+# --------------------------------
+
+test_rows = training_data.iloc[split:]
+
+# Model-based strategy: invested when the model says BUY
+model_return = (
+    pd.Series(predictions, index=test_rows.index).clip(lower=0)
+    * test_rows["future_return"]
+)
+
+print("\nSTRATEGY COMPARISON (test period, average daily return)")
+print("-----------------------")
+print("Weather rule:  ", round(test_rows["rule_return"].mean() * 100, 4), "%")
+print("Random forest: ", round(model_return.mean() * 100, 4), "%")
+print("Buy & hold:    ", round(test_rows["future_return"].mean() * 100, 4), "%")
+
+print("\nWeather rule signal counts (full year):")
+print(
+    combined_data["rule_signal"]
+    .map({1: "BUY", 0: "HOLD", -1: "SELL"})
+    .value_counts()
+)
+
+
 # --------------------------------
 # 10. TRAIN ON ALL AVAILABLE DATA
 # --------------------------------
@@ -244,6 +340,8 @@ print("-----------------------")
 
 print("Date:", latest_row.index[-1])
 print("Apple closing price:", latest_row["Close"].iloc[0])
+print("Weather score:", round(latest_row["weather_score"].iloc[0], 2))
+print("Weather rule decision:", signals[latest_row["rule_signal"].iloc[0]])
 print("Model decision:", signals[prediction])
 
 probabilities = model.predict_proba(
