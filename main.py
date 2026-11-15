@@ -5,6 +5,7 @@ from stockdata import getStockData
 import pandas as pd
 import plotly.express as px
 import random
+from stockdata import getStockData, moving_average_strategy, get_sp500_strategy
 
 app = Dash(__name__)
 
@@ -22,6 +23,9 @@ shanghai_data = getPastYear("Shanghai")
 apple_data = getStockData("AAPL")
 tesla_data = getStockData("TSLA")
 microsoft_data = getStockData("MSFT")
+
+apple_model = moving_average_strategy(apple_data)
+sp500_model, sp500_buy_hold = get_sp500_strategy()
 
 
 # -----------------------------
@@ -52,6 +56,7 @@ if not available_dates:
 default_date = available_dates[-1]
 
 
+
 # -----------------------------
 # PREPARE STOCK CHART DATA
 # -----------------------------
@@ -66,6 +71,8 @@ stock_prices = pd.concat(
 ).dropna()
 
 if not stock_prices.empty:
+
+    # Normalise individual stock prices to start at 100
     normalised_prices = (
         stock_prices.div(stock_prices.iloc[0]).mul(100)
     )
@@ -81,6 +88,35 @@ if not stock_prices.empty:
             "Microsoft": "#269C91"
         }
     )
+
+    # Add S&P 500 model performance
+    fig.add_scatter(
+        x=sp500_model.index,
+        y=sp500_model.values,
+        mode="lines",
+        name="S&P 500 Model",
+        line=dict(color="#E09F3E", width=3)
+    )
+
+    # Add S&P 500 buy and hold performance
+    fig.add_scatter(
+        x=sp500_buy_hold.index,
+        y=sp500_buy_hold.values,
+        mode="lines",
+        name="S&P 500 Buy & Hold",
+        line=dict(color="#493D50", width=3, dash="dash")
+    )
+
+    # Graph styling
+    fig.update_layout(
+        plot_bgcolor="#F8F3FA",
+        paper_bgcolor="#E0D4E7",
+        yaxis_title="Performance (starting at 100)",
+        xaxis_title="Date",
+        hovermode="x unified",
+        legend_title="Stocks and Strategies"
+    )
+
 else:
     fig = px.line(title="No stock data available")
 
