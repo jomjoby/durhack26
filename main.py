@@ -1,42 +1,89 @@
 
 from dash import Dash, html, dcc, Input, Output
-from weatherdata import getPastYear
-from stockdata import getStockData
 import pandas as pd
 import plotly.express as px
 import random
+from database.connection import get_connection
 
 app = Dash(__name__)
 
+import warnings
+
+warnings.filterwarnings(
+    "ignore",
+    message="pandas only supports SQLAlchemy connectable"
+)
 
 # -----------------------------
-# DOWNLOAD DATA
+# LOAD DATA FROM TIGERDATA
 # -----------------------------
 
-london_data = getPastYear("London")
-tokyo_data = getPastYear("Tokyo")
-sydney_data = getPastYear("Sydney")
-newyork_data = getPastYear("New York")
-shanghai_data = getPastYear("Shanghai")
+def load_weather_data(city):
 
-apple_data = getStockData("AAPL")
-tesla_data = getStockData("TSLA")
-microsoft_data = getStockData("MSFT")
+    with get_connection() as conn:
+        df = pd.read_sql_query(
+            """
+            SELECT
+                time AS date,
+                temperature AS temperature_2m,
+                humidity AS relative_humidity_2m
+            FROM weather_observations
+            WHERE city = %s
+            ORDER BY time
+            """,
+            conn,
+            params=(city,)
+        )
 
+    df["date"] = pd.to_datetime(df["date"], utc=True)
+
+    return df
+
+
+def load_stock_data(symbol):
+
+    with get_connection() as conn:
+        df = pd.read_sql_query(
+            """
+            SELECT
+                time,
+                open,
+                high,
+                low,
+                close,
+                volume
+            FROM stock_prices
+            WHERE symbol = %s
+            ORDER BY time
+            """,
+            conn,
+            params=(symbol,)
+        )
+
+    df["time"] = pd.to_datetime(df["time"], utc=True)
+    df = df.set_index("time")
+
+    return df
+
+
+# Load weather from TigerData
+london_data = load_weather_data("London")
+tokyo_data = load_weather_data("Tokyo")
+sydney_data = load_weather_data("Sydney")
+newyork_data = load_weather_data("New York")
+shanghai_data = load_weather_data("Shanghai")
+
+# Load stocks from TigerData
+apple_data = load_stock_data("AAPL")
+tesla_data = load_stock_data("TSLA")
+microsoft_data = load_stock_data("MSFT")
 
 # -----------------------------
 # STOCK DATA HELPERS
 # -----------------------------
 
 def get_close(data):
-    close = data["Close"]
-
-    # Handle yfinance MultiIndex columns
-    if isinstance(close, pd.DataFrame):
-        close = close.iloc[:, 0]
-
-    return close
-
+    return data["close"]
 
 # -----------------------------
 # AVAILABLE WEATHER DATES
