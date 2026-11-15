@@ -115,7 +115,8 @@ default_date = available_dates[-1]
 # -----------------------------
 
 PALETTE = ["#8B5CF6", "#F28C68", "#269C91", "#3A86FF", "#D1495B", "#6A994E", "#B5838D"]
-
+FRAME_MS = 500
+POINTS_PER_FRAME = 1
 
 def build_figure(tickers, strategies):
     fig = go.Figure()
