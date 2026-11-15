@@ -123,3 +123,35 @@ def getPastYear(loc_name):
     }
 
     return pd.DataFrame(hourly_data)
+
+
+def getAllPastYear():
+
+    all_data = {}
+
+    for i, response in enumerate(responses):
+
+        location_name = list(locations.keys())[i]
+
+        hourly = response.Hourly()
+
+        hourly_data = {
+            "date": pd.date_range(
+                start=pd.to_datetime(
+                    hourly.Time(), unit="s", utc=True
+                ),
+                end=pd.to_datetime(
+                    hourly.TimeEnd(), unit="s", utc=True
+                ),
+                freq=pd.Timedelta(
+                    seconds=hourly.Interval()
+                ),
+                inclusive="left"
+            ),
+            "temperature_2m": hourly.Variables(0).ValuesAsNumpy(),
+            "relative_humidity_2m": hourly.Variables(1).ValuesAsNumpy()
+        }
+
+        all_data[location_name] = pd.DataFrame(hourly_data)
+
+    return all_data
