@@ -1,46 +1,49 @@
+-- Enable TimescaleDB
 CREATE EXTENSION IF NOT EXISTS timescaledb;
 
--- Weather observations
-CREATE TABLE IF NOT EXISTS weather_data (
+-- WEATHER OBSERVATIONS
+CREATE TABLE IF NOT EXISTS weather_observations (
     time TIMESTAMPTZ NOT NULL,
-    location TEXT NOT NULL,
-    latitude DOUBLE PRECISION,
-    longitude DOUBLE PRECISION,
+    city TEXT NOT NULL,
+    country TEXT NOT NULL,
     temperature DOUBLE PRECISION,
     humidity DOUBLE PRECISION,
-    precipitation DOUBLE PRECISION,
-    wind_speed DOUBLE PRECISION
+
+    PRIMARY KEY (time, city)
 );
 
+-- Convert weather table into hypertable
 SELECT create_hypertable(
-    'weather_data',
+    'weather_observations',
     'time',
     if_not_exists => TRUE
 );
 
--- Market price observations
-CREATE TABLE IF NOT EXISTS market_data (
+
+-- STOCK PRICES
+CREATE TABLE IF NOT EXISTS stock_prices (
     time TIMESTAMPTZ NOT NULL,
     symbol TEXT NOT NULL,
     open DOUBLE PRECISION,
     high DOUBLE PRECISION,
     low DOUBLE PRECISION,
     close DOUBLE PRECISION,
-    volume DOUBLE PRECISION
+    volume BIGINT,
+
+    PRIMARY KEY (time, symbol)
 );
 
+-- Convert stock table into hypertable
 SELECT create_hypertable(
-    'market_data',
+    'stock_prices',
     'time',
     if_not_exists => TRUE
 );
 
--- Trading signals
-CREATE TABLE IF NOT EXISTS trading_signals (
-    id BIGSERIAL PRIMARY KEY,
-    symbol TEXT NOT NULL,
-    generated_at TIMESTAMPTZ NOT NULL,
-    signal TEXT NOT NULL,
-    confidence DOUBLE PRECISION,
-    explanation TEXT
-);
+
+-- Useful indexes
+CREATE INDEX IF NOT EXISTS idx_weather_city_time
+ON weather_observations (city, time DESC);
+
+CREATE INDEX IF NOT EXISTS idx_stock_symbol_time
+ON stock_prices (symbol, time DESC);
