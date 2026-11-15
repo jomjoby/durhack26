@@ -1,100 +1,89 @@
 from dash import Dash, html, dcc, Input, Output
-from weatherdata import getPastYear
-from stockdata import getStockData
 import pandas as pd
 import numpy as np
 import plotly.express as px
 import random
-from stockdata import getStockData, moving_average_strategy, get_sp500_strategy
-import plotly.graph_objects as go
-from strategies import prepare_weather, weather_rule_curve, random_forest_curve
+from database.connection import get_connection
 
 app = Dash(__name__)
 
+import warnings
+
+warnings.filterwarnings(
+    "ignore",
+    message="pandas only supports SQLAlchemy connectable"
+)
 
 # -----------------------------
-# DOWNLOAD DATA
+# LOAD DATA FROM TIGERDATA
 # -----------------------------
 
-london_data = getPastYear("London")
-tokyo_data = getPastYear("Tokyo")
-sydney_data = getPastYear("Sydney")
-newyork_data = getPastYear("New York")
-shanghai_data = getPastYear("Shanghai")
+def load_weather_data(city):
 
-apple_data = getStockData("AAPL")
-tesla_data = getStockData("TSLA")
-microsoft_data = getStockData("MSFT")
-nvidia_data = getStockData("NVDA")
-amazon_data = getStockData("AMZN")
-google_data = getStockData("GOOGL")
-meta_data = getStockData("META")
+    with get_connection() as conn:
+        df = pd.read_sql_query(
+            """
+            SELECT
+                time AS date,
+                temperature AS temperature_2m,
+                humidity AS relative_humidity_2m
+            FROM weather_observations
+            WHERE city = %s
+            ORDER BY time
+            """,
+            conn,
+            params=(city,)
+        )
 
-apple_model = moving_average_strategy(apple_data)
-sp500_model, sp500_buy_hold = get_sp500_strategy()
+    df["date"] = pd.to_datetime(df["date"], utc=True)
 
-
-# -----------------------------
-# WEATHER FEATURES FOR THE MODELS
-# -----------------------------
-
-CITY_DATA = {
-    "London": london_data,
-    "Tokyo": tokyo_data,
-    "Sydney": sydney_data,
-    "New York": newyork_data,
-    "Shanghai": shanghai_data,
-}
-
-weather_features = prepare_weather(CITY_DATA)
-CITIES = list(CITY_DATA.keys())
-
-# Stocks are downloaded once and reused
-stock_cache = {
-    "AAPL": apple_data,
-    "TSLA": tesla_data,
-    "MSFT": microsoft_data,
-    "NVDA": nvidia_data,
-    "AMZN": amazon_data,
-    "GOOGL": google_data,
-    "META": meta_data,
-}
-
-# ticker -> display name (used by the dropdown and the stock cards)
-STOCK_NAMES = {
-    "AAPL": "Apple",
-    "TSLA": "Tesla",
-    "MSFT": "Microsoft",
-    "NVDA": "Nvidia",
-    "AMZN": "Amazon",
-    "GOOGL": "Google",
-    "META": "Meta",
-}
+    return df
 
 
-def get_stock(ticker):
-    if ticker not in stock_cache:
-        stock_cache[ticker] = getStockData(ticker)
-    return stock_cache[ticker]
+def load_stock_data(symbol):
 
+    with get_connection() as conn:
+        df = pd.read_sql_query(
+            """
+            SELECT
+                time,
+                open,
+                high,
+                low,
+                close,
+                volume
+            FROM stock_prices
+            WHERE symbol = %s
+            ORDER BY time
+            """,
+            conn,
+            params=(symbol,)
+        )
+
+    df["time"] = pd.to_datetime(df["time"], utc=True)
+    df = df.set_index("time")
+
+    return df
+
+
+# Load weather from TigerData
+london_data = load_weather_data("London")
+tokyo_data = load_weather_data("Tokyo")
+sydney_data = load_weather_data("Sydney")
+newyork_data = load_weather_data("New York")
+shanghai_data = load_weather_data("Shanghai")
+
+# Load stocks from TigerData
+apple_data = load_stock_data("AAPL")
+tesla_data = load_stock_data("TSLA")
+microsoft_data = load_stock_data("MSFT")
 
 # -----------------------------
 # STOCK DATA HELPERS
 # -----------------------------
 
-def get_col(data, column):
-    col = data[column]
-
-    # Handle yfinance MultiIndex columns
-    if isinstance(col, pd.DataFrame):
-        col = col.iloc[:, 0]
-
-    return col
-
-
 def get_close(data):
-    return get_col(data, "Close")
-
+    return data["close"]
 
 # -----------------------------
 # AVAILABLE WEATHER DATES
