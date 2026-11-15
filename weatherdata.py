@@ -2,6 +2,7 @@ import openmeteo_requests
 import pandas as pd
 import requests_cache
 from retry_requests import retry
+from datetime import date, timedelta
 import matplotlib as mpl
 
 cache_session = requests_cache.CachedSession('.cache', expire_after = 3600)
@@ -19,16 +20,22 @@ locations = {
 latitudes = [loc[0] for loc in locations.values()]
 longitudes = [loc[1] for loc in locations.values()]
 
-url = "https://api.open-meteo.com/v1/forecast"
+# url = "https://api.open-meteo.com/v1/forecast"
+url = "https://archive-api.open-meteo.com/v1/archive"
+
+end_date = date.today() - timedelta(days=1)
+start_date = end_date - timedelta(days=365)
+
 
 params = {
     "latitude": latitudes,
     "longitude": longitudes,
-
-    "start_date": "2026-11-01",
-    "end_date": pd.Timestamp.today().strftime('%Y-%m-%d'),
-    "current": ["temperature_2m", "relative_humidity_2m", "wind_speed_10m"],
-    "hourly": ["temperature_2m", "relative_humidity_2m"],
+    "start_date": start_date.strftime("%Y-%m-%d"),
+    "end_date": end_date.strftime("%Y-%m-%d"),
+    "hourly": [
+        "temperature_2m",
+        "relative_humidity_2m"
+    ],
 }
 
 responses = openmeteo.weather_api(url, params = params)
@@ -36,8 +43,8 @@ responses = openmeteo.weather_api(url, params = params)
 for i, response in enumerate(responses):
     location_name = list(locations.keys())[i]
 
-    current = response.Current()
-    current_time = pd.to_datetime(current.Time(), unit="s", utc=True)
+    # current = response.Current()
+    # current_time = pd.to_datetime(current.Time(), unit="s", utc=True)
 
     hourly = response.Hourly()
     hourly_temperature_2m = hourly.Variables(0).ValuesAsNumpy()
@@ -69,4 +76,50 @@ def getTemp(loc_name):
             return temp
     return None
 
-    
+
+def getPastYear(loc_name):
+
+    location = next(
+        (name for name in locations if name.lower() == loc_name.lower()),
+        None
+    )
+
+    if location is None:
+        raise ValueError(f"Location not found: {loc_name}")
+
+    latitude, longitude = locations[location]
+
+    end_date = date.today() - timedelta(days=1)
+    start_date = end_date - timedelta(days=365)
+
+    url = "https://archive-api.open-meteo.com/v1/archive"
+
+    params = {
+        "latitude": latitude,
+        "longitude": longitude,
+        "start_date": start_date.strftime("%Y-%m-%d"),
+        "end_date": end_date.strftime("%Y-%m-%d"),
+        "hourly": [
+            "temperature_2m",
+            "relative_humidity_2m"
+        ],
+        "timezone": "auto"
+    }
+
+    responses = openmeteo.weather_api(url, params=params)
+    response = responses[0]
+
+    hourly = response.Hourly()
+
+    hourly_data = {
+        "date": pd.date_range(
+            start=pd.to_datetime(hourly.Time(), unit="s", utc=True),
+            end=pd.to_datetime(hourly.TimeEnd(), unit="s", utc=True),
+            freq=pd.Timedelta(seconds=hourly.Interval()),
+            inclusive="left"
+        ),
+        "temperature_2m": hourly.Variables(0).ValuesAsNumpy(),
+        "relative_humidity_2m": hourly.Variables(1).ValuesAsNumpy()
+    }
+
+    return pd.DataFrame(hourly_data)
